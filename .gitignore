@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Node / pnpm
+node_modules/
+*.log
+.pnpm-store/
+
+# Rust
+target/
+**/*.rs.bk
+
+# napi-rs build artifacts (kept out of source tree; published via release)
+*.node
+
+# Vite
+dist/
+.vite/

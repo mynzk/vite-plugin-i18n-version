@@ -1,0 +1,180 @@
+name: Release
+
+# Tag-driven release that builds the native module for the four Node triples the
+# loader expects (linux-x64-gnu, darwin-x64, darwin-arm64, win32-x64-msvc) and
+# aggregates them into a single npm publish of `vite-plugin-i18n-version`.
+#
+# `workflow_dispatch` is exposed for manual build-only runs (e.g. dry-runs from
+# a scratch branch before tagging v1.0.0).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Skip the npm publish step (build only)'
+        required: false
+        default: 'false'
+
+# Re-pushed tags should not double-publish — let the in-flight run finish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: native ${{ matrix.suffix }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Keep all four legs visible when one fails — easier to diagnose a
+      # problem on a single triple without losing the others.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            suffix: linux-x64-gnu
+          # `macos-latest` is arm64-only on GitHub-hosted runners, so x64
+          # needs the explicit `macos-13` image. Swap to `macos-14` if/when
+          # GitHub retires `macos-13`.
+          - os: macos-13
+            target: x86_64-apple-darwin
+            suffix: darwin-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            suffix: darwin-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: win32-x64-msvc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # On every current runner the matrix target matches the host, so
+          # this is a no-op — but it future-proofs against the hosted macOS
+          # labels shifting underneath us.
+          targets: ${{ matrix.target }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+
+      # Build exactly one triple on this runner. `--target` (not `--platform`)
+      # is what v3 of `@napi-rs/cli` requires — `--platform` would attempt
+      # every triple in `napi.triples` and most would fail without a cross
+      # toolchain. The crate's local dev script (`pnpm build`) keeps the
+      # historical `--platform` flag because that runs only on the dev box.
+      - name: Build native module
+        working-directory: crates/i18n_version_core
+        run: |
+          mkdir -p "$RUNNER_TEMP/napi-out"
+          pnpm exec napi build \
+            --target "$MATRIX_TARGET" \
+            --release --strip --no-js \
+            --output-dir "$RUNNER_TEMP/napi-out"
+        env:
+          MATRIX_TARGET: ${{ matrix.target }}
+
+      # Cheap guard: if the napi-rs suffix ever drifts (e.g. becomes
+      # `linux-x64-musl`), surface it here instead of at publish time.
+      - name: Verify produced filename
+        shell: bash
+        run: |
+          expected="i18n-version-core.${{ matrix.suffix }}.node"
+          if [ ! -f "$RUNNER_TEMP/napi-out/$expected" ]; then
+            echo "::error::expected $expected, got:"
+            ls -la "$RUNNER_TEMP/napi-out"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.suffix }}
+          path: ${{ runner.temp }}/napi-out/
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: publish npm
+    needs: build
+    # Tag push → publish. Manual dispatch → publish unless dry_run=true.
+    # `push` triggers don't define `inputs`, so the second branch correctly
+    # evaluates to false for them.
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+      || (github.event_name == 'workflow_dispatch' && inputs.dry_run != 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      # Each download is a distinct step (download-artifact cannot be invoked
+      # from inside a `run:` shell). `merge-multiple: true` lets four calls
+      # write into the same dir without clobbering each other.
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-linux-x64-gnu
+          path: packages/vite-plugin-i18n-version/dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-darwin-x64
+          path: packages/vite-plugin-i18n-version/dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-darwin-arm64
+          path: packages/vite-plugin-i18n-version/dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-win32-x64-msvc
+          path: packages/vite-plugin-i18n-version/dist
+          merge-multiple: true
+
+      - name: Verify all four binaries present
+        shell: bash
+        run: |
+          set -e
+          for s in linux-x64-gnu darwin-x64 darwin-arm64 win32-x64-msvc; do
+            f="packages/vite-plugin-i18n-version/dist/i18n-version-core.$s.node"
+            if [ ! -f "$f" ]; then
+              echo "::error::missing $f. contents of dist/:"
+              ls -la packages/vite-plugin-i18n-version/dist || true
+              exit 1
+            fi
+          done
+          echo "ok: all four native binaries staged"
+
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+
+      # `cd` into the package dir rather than `pnpm -r publish`, so the
+      # source-only crate package (`i18n-version-core`) is never published
+      # (it has `"private": true` as a second line of defence).
+      - name: Publish to npm
+        working-directory: packages/vite-plugin-i18n-version
+        run: pnpm publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
