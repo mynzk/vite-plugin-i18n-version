@@ -59,14 +59,17 @@ jobs:
           # labels shifting underneath us.
           targets: ${{ matrix.target }}
 
+      # pnpm/action-setup must precede setup-node: with `cache: 'pnpm'`
+      # setup-node tries to detect pnpm's version/path to derive cache keys,
+      # and fails when pnpm isn't on PATH yet.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
@@ -119,14 +122,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # pnpm/action-setup must precede setup-node: see comment in the `build` job.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       # Each download is a distinct step (download-artifact cannot be invoked
       # from inside a `run:` shell). `merge-multiple: true` lets four calls
