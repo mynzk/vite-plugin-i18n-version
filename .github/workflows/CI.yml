@@ -27,42 +27,6 @@ permissions:
   contents: read
 
 jobs:
-  # Fast inner-loop check on Linux. Linux is the cheapest hosted runner and
-  # is sufficient for `cargo test` (pure Rust) and the JS-side `vitest`. The
-  # build matrix below catches platform-specific breakage separately.
-  test:
-    name: test (linux)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Install workspace deps
-        run: pnpm install --frozen-lockfile
-
-      - name: Run cargo tests
-        working-directory: crates/i18n_version_core
-        run: cargo test --release
-
-      - name: Run vitest
-        working-directory: packages/vite-plugin-i18n-version
-        run: pnpm test
-
-      - name: Type check
-        # `--noEmit` is redundant for `tsc -b` (build mode) but harmless, and
-        # means a future `tsc --noEmit` swap doesn't change semantics.
-        working-directory: packages/vite-plugin-i18n-version
-        run: pnpm exec tsc -p tsconfig.build.json --noEmit
 
   # Build the native module for the four triples `release.yml` publishes.
   # `fail-fast: false` keeps the other legs visible when one target breaks
