@@ -94,6 +94,11 @@ jobs:
       # `--target`.
       - name: Build native module
         working-directory: crates/i18n_version_core
+        # `shell: bash` is required on the Windows leg: the default `pwsh`
+        # interprets `\` as an escape (not a line continuation) and tries to
+        # parse the `--` flags as PowerShell expressions, failing with
+        # "Missing expression after unary operator '--'".
+        shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/napi-out"
           pnpm exec napi build \
