@@ -58,29 +58,28 @@ function moduleDir(): string {
  * Search a few candidate filenames for the prebuilt .node binary.
  * In dev/test we stub it via NATIVE_BINARY_PATH env var to point at a fake.
  */
-function findBinary(): string {
-  const override = process.env.NATIVE_BINARY_PATH;
-  if (override) return override;
 
-  const dir = moduleDir();
-  const candidates = [
-    'i18n-version-core.darwin-arm64.node',
-    'i18n-version-core.darwin-x64.node',
-    'i18n-version-core.linux-x64-gnu.node',
-    'i18n-version-core.win32-x64-msvc.node',
-    'i18n-version-core.node',
-  ];
-  for (const c of candidates) {
-    const p = join(dir, c);
-    try {
-      nodeRequire('node:fs').accessSync(p);
-      return p;
-    } catch {
-      // try next
+function findBinary(): string {
+    const override = process.env.NATIVE_BINARY_PATH;
+    if (override) return override;
+
+    const dir = moduleDir();
+    const triCandidates =
+      process.platform === 'linux'
+        ? [`i18n-version-core.linux-${process.arch}-gnu.node`,
+           `i18n-version-core.linux-${process.arch}-musl.node`]
+        : [`i18n-version-core.${process.platform}-${process.arch}.node`];
+
+    for (const c of triCandidates) {
+      const p = join(dir, c);
+      try { nodeRequire('node:fs').accessSync(p); return p; } catch {}
     }
+    // 都不存在 → 抛错并把当前 platform/arch 写进错误信息
+    throw new NativeLoadError(
+      join(dir, triCandidates[0]),
+      new Error(`no prebuilt binary for ${process.platform}/${process.arch}`)
+    );
   }
-  return join(dir, candidates[0]);
-}
 
 /**
  * Load the native module. The path parameter exists so tests can supply a stub path.
