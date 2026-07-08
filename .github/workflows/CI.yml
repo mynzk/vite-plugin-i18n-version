@@ -1,0 +1,156 @@
+name: CI
+
+# Per-PR / per-push verification: runs unit tests + type-checks on Linux, then
+# builds the native module for the four Node triples the loader expects. Any
+# breakage that would block the release pipeline surfaces here first.
+#
+# Mirrors the target matrix of `.github/workflows/release.yml` so that a green
+# CI is a sufficient precondition for the release job — if CI can't build a
+# triple, the release publish would fail too.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Allow manual runs (e.g. verifying a branch against the main matrix before
+  # opening a PR) without having to push a dummy commit.
+  workflow_dispatch:
+
+# New pushes to the same ref supersede older runs — the previous build is
+# wasted work once the head SHA has moved on. Tags are unaffected because
+# they never enter this workflow.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Fast inner-loop check on Linux. Linux is the cheapest hosted runner and
+  # is sufficient for `cargo test` (pure Rust) and the JS-side `vitest`. The
+  # build matrix below catches platform-specific breakage separately.
+  test:
+    name: test (linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Run cargo tests
+        working-directory: crates/i18n_version_core
+        run: cargo test --release
+
+      - name: Run vitest
+        working-directory: packages/vite-plugin-i18n-version
+        run: pnpm test
+
+      - name: Type check
+        # `--noEmit` is redundant for `tsc -b` (build mode) but harmless, and
+        # means a future `tsc --noEmit` swap doesn't change semantics.
+        working-directory: packages/vite-plugin-i18n-version
+        run: pnpm exec tsc -p tsconfig.build.json --noEmit
+
+  # Build the native module for the four triples `release.yml` publishes.
+  # `fail-fast: false` keeps the other legs visible when one target breaks
+  # — diagnosing a single bad triple is easier when the other three still
+  # report their status.
+  build:
+    name: native ${{ matrix.suffix }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            suffix: linux-x64-gnu
+          # Both darwin legs run on Apple Silicon hosts (`macos-latest`,
+          # arm64-only as of 2024+). The x86_64 triple is cross-compiled via
+          # cargo from the same runner — the `-undefined dynamic_lookup`
+          # link flag in `.cargo/config.toml` covers the cross-arch case the
+          # same way it does the same-arch case. GitHub retired Intel macOS
+          # hosted runners entirely, so cross-compile is the only remaining
+          # path for `darwin-x64`.
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            suffix: darwin-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            suffix: darwin-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: win32-x64-msvc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # On every current runner the matrix target matches the host, so
+          # this is a no-op — but it future-proofs against the hosted macOS
+          # labels shifting underneath us.
+          targets: ${{ matrix.target }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+
+      # Build exactly one triple on this runner. `--target` (not `--platform`)
+      # is what v3 of `@napi-rs/cli` requires — `--platform` would attempt
+      # every triple in `napi.targets` and most would fail without a cross
+      # toolchain. The crate's local dev script (`pnpm build`) keeps the
+      # historical `--platform` flag because that runs only on the dev box.
+      - name: Build native module
+        working-directory: crates/i18n_version_core
+        run: |
+          mkdir -p "$RUNNER_TEMP/napi-out"
+          pnpm exec napi build \
+            --target "$MATRIX_TARGET" \
+            --release --strip --no-js \
+            --output-dir "$RUNNER_TEMP/napi-out"
+        env:
+          MATRIX_TARGET: ${{ matrix.target }}
+
+      # Cheap guard: if the napi-rs suffix ever drifts (e.g. becomes
+      # `linux-x64-musl`), surface it here instead of at publish time.
+      - name: Verify produced filename
+        shell: bash
+        run: |
+          expected="i18n-version-core.${{ matrix.suffix }}.node"
+          if [ ! -f "$RUNNER_TEMP/napi-out/$expected" ]; then
+            echo "::error::expected $expected, got:"
+            ls -la "$RUNNER_TEMP/napi-out"
+            exit 1
+          fi
+
+      # Persist the built binary so a maintainer can pull it from the run
+      # summary for ad-hoc verification (e.g. dropping it into a consumer
+      # project to repro a platform-specific bug).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.suffix }}
+          path: ${{ runner.temp }}/napi-out/
+          if-no-files-found: error
+          retention-days: 7
