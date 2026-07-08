@@ -27,7 +27,9 @@ export default defineConfig({
 
 ```ts
 // app code
-console.log(import.meta.env.VITE_I18N_VERSION);
+// The value is injected as a JSON string via `config.define`, so use the
+// identifier directly. It is *not* available through `import.meta.env`.
+console.log(VITE_I18N_VERSION); // e.g. "a1b2c3d4"
 ```
 
 ## Options

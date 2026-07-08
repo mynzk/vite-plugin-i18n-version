@@ -5,3 +5,15 @@ rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 [target.aarch64-unknown-linux-gnu]
 linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+# napi v3 always compiles the threadsafe-function / reference code paths, which
+# reference `napi_*` symbols provided by the Node host at runtime. For the cdylib
+# that ships to Node, `napi_build::setup()` already emits the cdylib-only
+# `-undefined dynamic_lookup` flag. Test executables are NOT cdylibs, so they'd
+# fail to link without the same flag — these entries extend it to all darwin
+# binaries so `cargo test` links (the undefined symbols are never called in tests).
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]

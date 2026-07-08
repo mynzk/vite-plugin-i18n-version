@@ -7,11 +7,13 @@
   "types": "index.d.ts",
   "license": "MIT",
   "napi": {
-    "name": "i18n-version-core",
-    "triples": {
-      "defaults": true,
-      "additional": []
-    }
+    "binaryName": "i18n-version-core",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc"
+    ]
   },
   "scripts": {
     "build": "napi build --platform --release --strip --no-js --output-dir ../../packages/vite-plugin-i18n-version/dist",

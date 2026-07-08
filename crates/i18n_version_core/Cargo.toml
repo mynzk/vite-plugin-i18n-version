@@ -8,13 +8,12 @@ rust-version = "1.77"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = { version = "2", default-features = false, features = ["napi4", "serde-json"] }
-napi-derive = "2"
+napi = { version = "3", default-features = false, features = ["napi4"] }
+napi-derive = "3"
 walkdir = "2"
 glob = "0.3"
 sha2 = "0.10"
 thiserror = "1"
-serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [build-dependencies]
@@ -22,3 +21,9 @@ napi-build = "2"
 
 [dev-dependencies]
 tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

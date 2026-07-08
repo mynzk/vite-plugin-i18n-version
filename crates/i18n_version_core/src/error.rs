@@ -26,6 +26,9 @@ pub enum I18nVersionError {
         source: glob::PatternError,
     },
 
+    #[error("invalid JSON in {path}: {message}")]
+    InvalidJson { path: String, message: String },
+
     #[error("length must be in [1, 64], got {0}")]
     InvalidLength(usize),
 }

@@ -73,7 +73,7 @@ jobs:
 
       # Build exactly one triple on this runner. `--target` (not `--platform`)
       # is what v3 of `@napi-rs/cli` requires — `--platform` would attempt
-      # every triple in `napi.triples` and most would fail without a cross
+      # every triple in `napi.targets` and most would fail without a cross
       # toolchain. The crate's local dev script (`pnpm build`) keeps the
       # historical `--platform` flag because that runs only on the dev box.
       - name: Build native module
