@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-i18n-version",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Vite plugin: hash JSON i18n files at startup and inject the version via config.define.",
   "type": "module",
   "main": "./dist/index.js",

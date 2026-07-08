@@ -62,7 +62,7 @@ jobs:
 
       # Pinned to a specific Rust release. `@stable` floats between runs and
       # can produce subtly different binaries for the same source.
-      - uses: dtolnay/rust-toolchain@1.83.0
+      - uses: dtolnay/rust-toolchain@stable
         with:
           # On every current runner the matrix target matches the host, so
           # this is a no-op — but it future-proofs against the hosted macOS
