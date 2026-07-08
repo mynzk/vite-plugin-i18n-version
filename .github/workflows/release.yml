@@ -84,17 +84,21 @@ jobs:
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      # Build exactly one triple on this runner. `--target` (not `--platform`)
-      # is what v3 of `@napi-rs/cli` requires — `--platform` would attempt
-      # every triple in `napi.targets` and most would fail without a cross
-      # toolchain. The crate's local dev script (`pnpm build`) keeps the
-      # historical `--platform` flag because that runs only on the dev box.
+      # Build exactly one triple on this runner. `--target` picks the Rust
+      # triple to hand to `cargo`; `--platform` is the boolean that tells
+      # `@napi-rs/cli` to suffix the output filename with the Node triple
+      # (e.g. `i18n-version-core.darwin-arm64.node`). Without `--platform`
+      # the file is emitted as `i18n-version-core.node` and the verify step
+      # below fails. The two flags are orthogonal — `--platform` does NOT
+      # iterate `napi.targets`, that's controlled by passing/omitting
+      # `--target`.
       - name: Build native module
         working-directory: crates/i18n_version_core
         run: |
           mkdir -p "$RUNNER_TEMP/napi-out"
           pnpm exec napi build \
             --target "$MATRIX_TARGET" \
+            --platform \
             --release --strip --no-js \
             --output-dir "$RUNNER_TEMP/napi-out"
         env:
