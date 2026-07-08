@@ -28,6 +28,9 @@ jobs:
   build:
     name: native ${{ matrix.suffix }}
     runs-on: ${{ matrix.os }}
+    # A single hung build leg used to run for the full 6h default; 30 min is
+    # generous for one native triple and surfaces stalls fast.
+    timeout-minutes: 30
     strategy:
       # Keep all four legs visible when one fails — easier to diagnose a
       # problem on a single triple without losing the others.
@@ -51,8 +54,15 @@ jobs:
             suffix: win32-x64-msvc
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Don't write the auto-issued GITHUB_TOKEN into .git/config — the
+          # release job doesn't push back, so there's no reason to leave it
+          # around for later steps to (mis)use.
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned to a specific Rust release. `@stable` floats between runs and
+      # can produce subtly different binaries for the same source.
+      - uses: dtolnay/rust-toolchain@1.83.0
         with:
           # On every current runner the matrix target matches the host, so
           # this is a no-op — but it future-proofs against the hosted macOS
@@ -61,10 +71,10 @@ jobs:
 
       # pnpm/action-setup must precede setup-node: with `cache: 'pnpm'`
       # setup-node tries to detect pnpm's version/path to derive cache keys,
-      # and fails when pnpm isn't on PATH yet.
+      # and fails when pnpm isn't on PATH yet. No explicit `version:` here —
+      # pnpm/action-setup reads it from `packageManager` in package.json, so
+      # bumping the version only requires editing one place.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
@@ -72,7 +82,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install workspace deps
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       # Build exactly one triple on this runner. `--target` (not `--platform`)
       # is what v3 of `@napi-rs/cli` requires — `--platform` would attempt
@@ -91,13 +101,16 @@ jobs:
           MATRIX_TARGET: ${{ matrix.target }}
 
       # Cheap guard: if the napi-rs suffix ever drifts (e.g. becomes
-      # `linux-x64-musl`), surface it here instead of at publish time.
+      # `linux-x64-musl`), surface it here instead of at publish time. The
+      # size check rejects 0-byte files that napi-rs has occasionally
+      # produced mid-toolchain failure.
       - name: Verify produced filename
         shell: bash
         run: |
           expected="i18n-version-core.${{ matrix.suffix }}.node"
-          if [ ! -f "$RUNNER_TEMP/napi-out/$expected" ]; then
-            echo "::error::expected $expected, got:"
+          f="$RUNNER_TEMP/napi-out/$expected"
+          if [ ! -s "$f" ]; then
+            echo "::error::missing or empty $expected, got:"
             ls -la "$RUNNER_TEMP/napi-out"
             exit 1
           fi
@@ -107,11 +120,16 @@ jobs:
           name: native-${{ matrix.suffix }}
           path: ${{ runner.temp }}/napi-out/
           if-no-files-found: error
-          retention-days: 3
+          # 14d gives enough headroom to debug a release that fails after the
+          # matrix legs succeeded (e.g. publish-time failures).
+          retention-days: 14
 
   publish:
     name: publish npm
     needs: build
+    # Publish only has to stage four small artifacts and re-install — 10 min
+    # is well above the realistic case and short enough to surface stalls.
+    timeout-minutes: 10
     # Tag push → publish. Manual dispatch → publish unless dry_run=true.
     # `push` triggers don't define `inputs`, so the second branch correctly
     # evaluates to false for them.
@@ -121,11 +139,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # pnpm/action-setup must precede setup-node: see comment in the `build` job.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
@@ -162,8 +180,9 @@ jobs:
           set -e
           for s in linux-x64-gnu darwin-x64 darwin-arm64 win32-x64-msvc; do
             f="packages/vite-plugin-i18n-version/dist/i18n-version-core.$s.node"
-            if [ ! -f "$f" ]; then
-              echo "::error::missing $f. contents of dist/:"
+            # `-s` rejects both missing and 0-byte files in one expression.
+            if [ ! -s "$f" ]; then
+              echo "::error::missing or empty $f. contents of dist/:"
               ls -la packages/vite-plugin-i18n-version/dist || true
               exit 1
             fi
@@ -171,7 +190,25 @@ jobs:
           echo "ok: all four native binaries staged"
 
       - name: Install workspace deps
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      # The version baked into package.json must match the tag we just
+      # pushed — otherwise `pnpm publish` will happily publish e.g. 0.1.0
+      # under a v0.2.0 tag. Skipped for `workflow_dispatch` since that
+      # ref is a branch, not a tag — the operator is presumed to know
+      # what they're publishing.
+      - name: Verify version matches tag
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -e
+          pkg=$(jq -r .version packages/vite-plugin-i18n-version/package.json)
+          tag=${GITHUB_REF#refs/tags/v}
+          if [ "$pkg" != "$tag" ]; then
+            echo "::error::version mismatch: package.json=$pkg, tag=$tag"
+            exit 1
+          fi
+          echo "ok: publishing $pkg"
 
       # `cd` into the package dir rather than `pnpm -r publish`, so the
       # source-only crate package (`i18n-version-core`) is never published
@@ -181,4 +218,3 @@ jobs:
         run: pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
