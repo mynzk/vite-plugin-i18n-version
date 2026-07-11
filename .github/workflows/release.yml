@@ -1,11 +1,5 @@
 name: Release
 
-# Tag-driven release that builds the native module for the four Node triples the
-# loader expects (linux-x64-gnu, darwin-x64, darwin-arm64, win32-x64-msvc) and
-# aggregates them into a single npm publish of `vite-plugin-i18n-version`.
-#
-# `workflow_dispatch` is exposed for manual build-only runs (e.g. dry-runs from
-# a scratch branch before tagging v1.0.0).
 on:
   push:
     tags: ['v*']
@@ -16,7 +10,7 @@ on:
         required: false
         default: 'false'
 
-# Re-pushed tags should not double-publish — let the in-flight run finish.
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -81,16 +75,9 @@ jobs:
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      # Build exactly one triple on this runner. `--target` picks the Rust
-      # triple to hand to `cargo`; `--platform` is the boolean that tells
-      # `@napi-rs/cli` to suffix the output filename with the Node triple
-      # (e.g. `i18n-version-core.darwin-arm64.node`). Without `--platform`
-      # the file is emitted as `i18n-version-core.node` and the verify step
-      # below fails. The two flags are orthogonal — `--platform` does NOT
-      # iterate `napi.targets`, that's controlled by passing/omitting
       # `--target`.
       - name: Build native module
-        working-directory: crates/i18n_version_core
+        working-directory: crates/json_version_core
         # `shell: bash` is required on the Windows leg: the default `pwsh`
         # interprets `\` as an escape (not a line continuation) and tries to
         # parse the `--` flags as PowerShell expressions, failing with
@@ -113,7 +100,7 @@ jobs:
       - name: Verify produced filename
         shell: bash
         run: |
-          expected="i18n-version-core.${{ matrix.suffix }}.node"
+          expected="json-version-core.${{ matrix.suffix }}.node"
           f="$RUNNER_TEMP/napi-out/$expected"
           if [ ! -s "$f" ]; then
             echo "::error::missing or empty $expected, got:"
@@ -162,22 +149,22 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: native-linux-x64-gnu
-          path: packages/vite-plugin-i18n-version/dist
+          path: packages/json-version-plugin/dist
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
           name: native-darwin-x64
-          path: packages/vite-plugin-i18n-version/dist
+          path: packages/json-version-plugin/dist
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
           name: native-darwin-arm64
-          path: packages/vite-plugin-i18n-version/dist
+          path: packages/json-version-plugin/dist
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
           name: native-win32-x64-msvc
-          path: packages/vite-plugin-i18n-version/dist
+          path: packages/json-version-plugin/dist
           merge-multiple: true
 
       - name: Verify all four binaries present
@@ -185,11 +172,11 @@ jobs:
         run: |
           set -e
           for s in linux-x64-gnu darwin-x64 darwin-arm64 win32-x64-msvc; do
-            f="packages/vite-plugin-i18n-version/dist/i18n-version-core.$s.node"
+            f="packages/json-version-plugin/dist/json-version-core.$s.node"
             # `-s` rejects both missing and 0-byte files in one expression.
             if [ ! -s "$f" ]; then
               echo "::error::missing or empty $f. contents of dist/:"
-              ls -la packages/vite-plugin-i18n-version/dist || true
+              ls -la packages/json-version-plugin/dist || true
               exit 1
             fi
           done
@@ -208,7 +195,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          pkg=$(jq -r .version packages/vite-plugin-i18n-version/package.json)
+          pkg=$(jq -r .version packages/json-version-plugin/package.json)
           tag=${GITHUB_REF#refs/tags/v}
           if [ "$pkg" != "$tag" ]; then
             echo "::error::version mismatch: package.json=$pkg, tag=$tag"
@@ -216,11 +203,8 @@ jobs:
           fi
           echo "ok: publishing $pkg"
 
-      # `cd` into the package dir rather than `pnpm -r publish`, so the
-      # source-only crate package (`i18n-version-core`) is never published
-      # (it has `"private": true` as a second line of defence).
       - name: Publish to npm
-        working-directory: packages/vite-plugin-i18n-version
+        working-directory: packages/json-version-plugin
         run: pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

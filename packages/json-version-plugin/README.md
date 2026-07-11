@@ -5,7 +5,7 @@ Compute a content hash of your JSON i18n files and inject it via `config.define`
 ## Install
 
 ```sh
-pnpm add -D vite-plugin-i18n-version
+pnpm add -D json-version-plugin
 ```
 
 ## Usage
@@ -13,11 +13,11 @@ pnpm add -D vite-plugin-i18n-version
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite';
-import i18nVersionPlugin from 'vite-plugin-i18n-version';
+import jsonVersionPlugin from 'json-version-plugin';
 
 export default defineConfig({
   plugins: [
-    i18nVersionPlugin({
+    jsonVersionPlugin({
       include: ['locales/**/*.json'],
       defineKey: 'VITE_I18N_VERSION',
     }),

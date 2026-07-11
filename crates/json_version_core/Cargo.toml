@@ -1,5 +1,5 @@
 [package]
-name = "i18n_version_core"
+name = "json_version_core"
 version = "0.1.8"
 edition = "2024"
 rust-version = "1.85"

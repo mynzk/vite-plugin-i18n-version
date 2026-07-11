@@ -25,7 +25,7 @@ export class NativeLoadError extends Error {
     public readonly cause: unknown
   ) {
     super(
-      `vite-plugin-i18n-version: failed to load native module at "${binaryPath}". ` +
+      `json-version-plugin: failed to load native module at "${binaryPath}". ` +
         'Try reinstalling the package to refresh the prebuilt binary.'
     );
     this.name = 'NativeLoadError';
@@ -66,9 +66,9 @@ function findBinary(): string {
     const dir = moduleDir();
     const triCandidates =
       process.platform === 'linux'
-        ? [`i18n-version-core.linux-${process.arch}-gnu.node`,
-           `i18n-version-core.linux-${process.arch}-musl.node`]
-        : [`i18n-version-core.${process.platform}-${process.arch}.node`];
+        ? [`json-version-core.linux-${process.arch}-gnu.node`,
+           `json-version-core.linux-${process.arch}-musl.node`]
+        : [`json-version-core.${process.platform}-${process.arch}.node`];
 
     for (const c of triCandidates) {
       const p = join(dir, c);

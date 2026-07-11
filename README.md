@@ -1,2 +1,2 @@
-# vite-plugin-i18n-version
+# json-version-plugin
 检测多语言文件变动

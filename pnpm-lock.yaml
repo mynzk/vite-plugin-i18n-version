@@ -8,13 +8,13 @@ importers:
 
   .: {}
 
-  crates/i18n_version_core:
+  crates/json_version_core:
     devDependencies:
       '@napi-rs/cli':
         specifier: ^3.0.0
         version: 3.7.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(@types/node@20.19.43)
 
-  packages/vite-plugin-i18n-version:
+  packages/json-version-plugin:
     devDependencies:
       '@types/node':
         specifier: ^20.11.0

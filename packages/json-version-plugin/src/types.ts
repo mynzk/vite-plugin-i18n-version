@@ -13,5 +13,5 @@ export interface PluginOptions {
   defineKey?: string;
 }
 
-export const DEFAULT_DEFINE_KEY = '__I18N_VERSION__';
+export const DEFAULT_DEFINE_KEY = '__JSON_VERSION__';
 export const DEFAULT_LENGTH = 8;

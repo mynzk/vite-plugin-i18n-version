@@ -1,0 +1,25 @@
+{
+  "name": "json-version-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native module for json-version-plugin",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "napi": {
+    "binaryName": "json-version-core",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc"
+    ]
+  },
+  "scripts": {
+    "build": "napi build --platform --release --strip --no-js --output-dir ../../packages/json-version-plugin/dist",
+    "build:debug": "napi build --platform --no-js --output-dir ../../packages/json-version-plugin/dist"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0"
+  }
+}

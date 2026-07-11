@@ -8,9 +8,9 @@ import {
 } from './types.js';
 import { loadNative, NativeLoadError, type ComputeOptionsNative } from './native.js';
 
-const PLUGIN_NAME = 'vite-plugin-i18n-version';
+const PLUGIN_NAME = 'json-version-plugin';
 
-export default function i18nVersionPlugin(options: PluginOptions) {
+export default function jsonVersionPlugin(options: PluginOptions) {
   const {
     include,
     root = process.cwd(),

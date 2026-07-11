@@ -1,6 +1,6 @@
 {
-  "name": "vite-plugin-i18n-version",
-  "version": "0.1.8",
+  "name": "@frada/json-version-plugin",
+  "version": "0.1.0",
   "description": "Vite plugin: hash JSON i18n files at startup and inject the version via config.define.",
   "type": "module",
   "main": "./dist/index.js",
@@ -17,7 +17,7 @@
     "README.md"
   ],
   "scripts": {
-    "prebuild": "pnpm --filter i18n-version-core build",
+    "prebuild": "pnpm --filter json-version-core build",
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest"
